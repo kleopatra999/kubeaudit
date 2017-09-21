@@ -10,6 +10,13 @@ brew:
   install: bin.install "kubeaudit"
   homepage: "https://github.com/shopify/kubeaudit"
   description: "kubeaudit audits Kubernetes clusters for common security controls"
+dockers:
+  -
+    image: shopify/kubeaudit
+    dockerfile: Dockerfile
+    goos: linux
+    goarch: amd64
+    binary: kubeaudit
 builds:
 - goos:
   - linux
