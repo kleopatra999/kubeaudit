@@ -4,7 +4,12 @@ release:
     owner: Shopify
     name: kubeaudit
 brew:
+  github:
+    owner: shopify
+    name: homebrew-shopify
   install: bin.install "kubeaudit"
+  homepage: "https://github.com/shopify/kubeaudit"
+  description: "kubeaudit audits Kubernetes clusters for common security controls"
 builds:
 - goos:
   - linux
