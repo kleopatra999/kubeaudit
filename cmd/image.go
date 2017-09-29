@@ -15,14 +15,24 @@ type imgFlags struct {
 	img string
 }
 
-func printResultImg(results []Result) {
+func printResultImg(results []Result, image string) {
+	imageLabel := strings.Split(image, ":")
+	compImgTag := imageLabel[1]
+
 	for _, result := range results {
 		if result.err > 0 {
-			log.WithFields(log.Fields{
-				"type": result.kubeType,
-				"tag":  result.img_tag}).Error(result.namespace,
-				"/", result.name)
-
+			switch {
+			case result.img_tag != compImgTag:
+				log.WithFields(log.Fields{
+					"type": result.kubeType,
+					"tag":  result.img_tag}).Error(result.namespace,
+					"/", result.name)
+			case result.img_tag == compImgTag:
+				log.WithFields(log.Fields{
+					"type": result.kubeType,
+					"tag":  result.img_tag}).Info(result.namespace,
+					"/", result.name)
+			}
 		}
 	}
 }
@@ -41,7 +51,6 @@ func checkImage(container apiv1.Container, image string, result *Result) {
 	}
 
 	compImg := imageLabel[0]
-	compImgTag := imageLabel[1]
 
 	contImgLabel := strings.Split(container.Image, ":")
 	if len(contImgLabel) < 2 {
@@ -54,7 +63,7 @@ func checkImage(container apiv1.Container, image string, result *Result) {
 	contImg = contImgLabel[0]
 	contTag = contImgLabel[1]
 
-	if contImg == compImg && contTag != compImgTag {
+	if contImg == compImg {
 		result.err = 1
 		result.img_name = contImg
 		result.img_tag = contTag
@@ -73,7 +82,7 @@ func auditImages(image string, items Items) (results []Result) {
 			}
 		}
 	}
-	printResultImg(results)
+	printResultImg(results, image)
 	defer wg.Done()
 	return
 }
@@ -92,6 +101,11 @@ Example usage:
 kubeaudit image --image gcr.io/google_containers/echoserver:1.7
 kubeaudit image -i gcr.io/google_containers/echoserver:1.7`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(imgConfig.img) == 0 {
+			log.Error("Empty image name. Are you missing the image flag?")
+			return
+		}
+
 		kube, err := kubeClient(rootConfig.kubeConfig)
 		if err != nil {
 			log.Error(err)
