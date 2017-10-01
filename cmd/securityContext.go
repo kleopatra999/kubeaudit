@@ -3,7 +3,10 @@ package cmd
 import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	v1beta1 "k8s.io/api/apps/v1beta1"
 	apiv1 "k8s.io/api/core/v1"
+	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	"reflect"
 )
 
 func checkSecurityContext(container apiv1.Container, result *Result) {
@@ -91,28 +94,48 @@ kubeaudit sc
 kubeaudit sc nonroot
 kubeaudit sc rootfs`,
 	Run: func(cmd *cobra.Command, args []string) {
-		kube, err := kubeClient(rootConfig.kubeConfig)
-		if err != nil {
-			log.Error(err)
-		}
 		if rootConfig.json {
 			log.SetFormatter(&log.JSONFormatter{})
 		}
-		// fetch deployments, statefulsets, daemonsets
-		// and pods which do not belong to another abstraction
-		deployments := getDeployments(kube)
-		statefulSets := getStatefulSets(kube)
-		daemonSets := getDaemonSets(kube)
-		pods := getPods(kube)
-		replicationControllers := getReplicationControllers(kube)
 
-		wg.Add(5)
-		go auditSecurityContext(kubeAuditStatefulSets{list: statefulSets})
-		go auditSecurityContext(kubeAuditDaemonSets{list: daemonSets})
-		go auditSecurityContext(kubeAuditPods{list: pods})
-		go auditSecurityContext(kubeAuditReplicationControllers{list: replicationControllers})
-		go auditSecurityContext(kubeAuditDeployments{list: deployments})
-		wg.Wait()
+		if rootConfig.config != "" {
+			wg.Add(1)
+			resource := getKubeResource(rootConfig.config)
+			log.Info(reflect.TypeOf(resource).String())
+			switch reflect.TypeOf(resource).String() {
+			case "*v1beta1.Deployment":
+				auditSecurityContext(kubeAuditDeployments{list: convertDeploymentToDeploymentList(*resource.(*v1beta1.Deployment))})
+			case "*v1beta1.StatefulSet":
+				auditSecurityContext(kubeAuditStatefulSets{list: convertStatefulSetToStatefulSetList(*resource.(*v1beta1.StatefulSet))})
+			case "*v1beta1.DaemonSet":
+				auditSecurityContext(kubeAuditDaemonSets{list: convertDaemonSetToDaemonSetList(*resource.(*extensionsv1beta1.DaemonSet))})
+			case "*v1.Pod":
+				auditSecurityContext(kubeAuditPods{list: convertPodToPodList(*resource.(*apiv1.Pod))})
+			case "*v1.ReplicationController":
+				auditSecurityContext(kubeAuditReplicationControllers{list: convertReplicationControllerToReplicationList(*resource.(*apiv1.ReplicationController))})
+			}
+		} else {
+			kube, err := kubeClient(rootConfig.kubeConfig)
+			if err != nil {
+				log.Error(err)
+			}
+
+			// fetch deployments, statefulsets, daemonsets
+			// and pods which do not belong to another abstraction
+			deployments := getDeployments(kube)
+			statefulSets := getStatefulSets(kube)
+			daemonSets := getDaemonSets(kube)
+			pods := getPods(kube)
+			replicationControllers := getReplicationControllers(kube)
+
+			wg.Add(5)
+			go auditSecurityContext(kubeAuditStatefulSets{list: statefulSets})
+			go auditSecurityContext(kubeAuditDaemonSets{list: daemonSets})
+			go auditSecurityContext(kubeAuditPods{list: pods})
+			go auditSecurityContext(kubeAuditReplicationControllers{list: replicationControllers})
+			go auditSecurityContext(kubeAuditDeployments{list: deployments})
+			wg.Wait()
+		}
 	},
 }
 
